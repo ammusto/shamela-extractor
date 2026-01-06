@@ -221,6 +221,9 @@ public class ShamelaIndexExporter {
                 // Find all docs for this book_id
                 List<DocWithId> docsForBook = new ArrayList<>();
 
+                // Get leaf readers for checking live docs
+                List<LeafReaderContext> leaves = reader.leaves();
+
                 // Use TermEnum to find matching documents efficiently
                 TermsEnum termsEnum = terms.iterator();
                 BytesRef prefix = new BytesRef(bookId + "-");
@@ -232,7 +235,7 @@ public class ShamelaIndexExporter {
                 BytesRef currentTerm = termsEnum.term();
                 if (currentTerm != null && currentTerm.utf8ToString().startsWith(bookId + "-")) {
                     // Process the first matching term
-                    processTermForBook(reader, termsEnum, bookId, docsForBook);
+                    processTermForBook(reader, termsEnum, bookId, docsForBook, leaves);
 
                     // Process remaining terms
                     while (true) {
@@ -240,7 +243,7 @@ public class ShamelaIndexExporter {
                         if (nextTerm == null || !nextTerm.utf8ToString().startsWith(bookId + "-")) {
                             break;
                         }
-                        processTermForBook(reader, termsEnum, bookId, docsForBook);
+                        processTermForBook(reader, termsEnum, bookId, docsForBook, leaves);
                     }
                 }
 
@@ -278,11 +281,24 @@ public class ShamelaIndexExporter {
     }
 
     // Helper method to process a term for a book
+    // Uses liveDocs to skip deleted documents
     private static void processTermForBook(IndexReader reader, TermsEnum termsEnum, String bookId,
-            List<DocWithId> docsForBook) throws IOException {
+            List<DocWithId> docsForBook, List<LeafReaderContext> leaves) throws IOException {
         PostingsEnum postings = termsEnum.postings(null);
         while (postings.nextDoc() != PostingsEnum.NO_MORE_DOCS) {
             int docId = postings.docID();
+
+            // Check if document is live (not deleted)
+            int leafIdx = ReaderUtil.subIndex(docId, leaves);
+            LeafReaderContext ctx = leaves.get(leafIdx);
+            Bits liveDocs = ctx.reader().getLiveDocs();
+            int localDocId = docId - ctx.docBase;
+
+            // Skip deleted documents
+            if (liveDocs != null && !liveDocs.get(localDocId)) {
+                continue;
+            }
+
             Document doc = reader.storedFields().document(docId);
             String idValue = doc.get("id");
             if (idValue != null && idValue.startsWith(bookId + "-")) {
@@ -341,6 +357,9 @@ public class ShamelaIndexExporter {
                 // Find all titles for this book
                 List<TitleDoc> titlesForBook = new ArrayList<>();
 
+                // Get leaf readers for checking live docs
+                List<LeafReaderContext> leaves = reader.leaves();
+
                 // Use TermEnum to find matching documents efficiently
                 TermsEnum termsEnum = terms.iterator();
                 BytesRef prefix = new BytesRef(bookId + "-");
@@ -352,7 +371,7 @@ public class ShamelaIndexExporter {
                 BytesRef currentTerm = termsEnum.term();
                 if (currentTerm != null && currentTerm.utf8ToString().startsWith(bookId + "-")) {
                     // Process the first matching term
-                    processTermForTitle(reader, termsEnum, bookId, titlesForBook);
+                    processTermForTitle(reader, termsEnum, bookId, titlesForBook, leaves);
 
                     // Process remaining terms
                     while (true) {
@@ -360,7 +379,7 @@ public class ShamelaIndexExporter {
                         if (nextTerm == null || !nextTerm.utf8ToString().startsWith(bookId + "-")) {
                             break;
                         }
-                        processTermForTitle(reader, termsEnum, bookId, titlesForBook);
+                        processTermForTitle(reader, termsEnum, bookId, titlesForBook, leaves);
                     }
                 }
 
@@ -386,11 +405,24 @@ public class ShamelaIndexExporter {
     }
 
     // Helper method to process a term for a title
+    // Uses liveDocs to skip deleted documents
     private static void processTermForTitle(IndexReader reader, TermsEnum termsEnum, String bookId,
-            List<TitleDoc> titlesForBook) throws IOException {
+            List<TitleDoc> titlesForBook, List<LeafReaderContext> leaves) throws IOException {
         PostingsEnum postings = termsEnum.postings(null);
         while (postings.nextDoc() != PostingsEnum.NO_MORE_DOCS) {
             int docId = postings.docID();
+
+            // Check if document is live (not deleted)
+            int leafIdx = ReaderUtil.subIndex(docId, leaves);
+            LeafReaderContext ctx = leaves.get(leafIdx);
+            Bits liveDocs = ctx.reader().getLiveDocs();
+            int localDocId = docId - ctx.docBase;
+
+            // Skip deleted documents
+            if (liveDocs != null && !liveDocs.get(localDocId)) {
+                continue;
+            }
+
             Document doc = reader.storedFields().document(docId);
             String idValue = doc.get("id");
 
